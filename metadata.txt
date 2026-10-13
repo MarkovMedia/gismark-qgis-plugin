@@ -1,0 +1,10 @@
+[general]
+name=GisMark
+description=A simple GisMark plugin prototype.
+version=0.1
+qgisMinimumVersion=3.28
+author=Markov Media
+email=hello@gismark.io
+about=The first experimental GisMark plugin for QGIS.
+category=Plugins
+experimental=True
