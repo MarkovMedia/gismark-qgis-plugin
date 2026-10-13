@@ -26,7 +26,7 @@ class GisMarkDialog(QDialog):
         self.iface = iface
 
         self.setWindowTitle("GisMark")
-        self.resize(420, 240)
+        self.resize(460, 380)
 
         layout = QVBoxLayout(self)
 
@@ -41,11 +41,22 @@ class GisMarkDialog(QDialog):
         self.prompt_input.setPlaceholderText(
             "e.g. Hotels near the railway station in Budapest"
         )
+
         layout.addWidget(self.prompt_input)
 
         self.search_button = QPushButton("Search GisMark")
         self.search_button.clicked.connect(self.search)
         layout.addWidget(self.search_button)
+
+        layout.addWidget(QLabel("GisMark response"))
+
+        self.response_output = QTextEdit()
+        self.response_output.setReadOnly(True)
+        self.response_output.setPlaceholderText(
+            "GisMark's response will appear here."
+        )
+
+        layout.addWidget(self.response_output)
 
     def search(self):
         prompt = self.prompt_input.toPlainText().strip()
@@ -57,6 +68,8 @@ class GisMarkDialog(QDialog):
                 "Please enter a search prompt."
             )
             return
+
+        self.response_output.clear()
 
         headers = {
             "Authorization": f"Bearer {API_KEY}",
@@ -79,28 +92,17 @@ class GisMarkDialog(QDialog):
             )
 
             response.raise_for_status()
-           
-            
+                       
             data = response.json()
 
-            result = json.dumps(
-                data,
-                indent=2,
-                ensure_ascii=False,                
-            )
+            message = data.get("message", "")
+            self.response_output.setPlainText(message)
 
             geojson = data.get("geojson")
 
             if geojson:
                 self.display_geojson(geojson)
-            else:
-                QMessageBox.information(
-                    self,
-                    "GisMark API response",
-                    result
-                )                  
-          
-            
+           
         except requests.RequestException as error:
             message = str(error)
 
