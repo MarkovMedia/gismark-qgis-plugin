@@ -96,11 +96,17 @@ class GisMarkDialog(QDialog):
             data = response.json()
 
             message = data.get("message", "")
-            self.response_output.setPlainText(message)
+            content = message.get("content", "")        
 
-            geojson = data.get("geojson")
+            self.response_output.setPlainText(content)
 
-            if geojson:
+            features = data.get("features", [])
+
+            if features:
+                geojson = {
+                    "type": "FeatureCollection",
+                    "features": features,
+                }
                 self.display_geojson(geojson)
            
         except requests.RequestException as error:
@@ -124,40 +130,85 @@ class GisMarkDialog(QDialog):
 
     
     def display_geojson(self, geojson):
-        # Create a temporary GeoJSON file.
-        with tempfile.NamedTemporaryFile(
-            mode="w",
-            suffix=".geojson",
-            encoding="utf-8",
-            delete=False,
-        ) as file:
-            json.dump(geojson, file)
-            file_path = file.name
+        features = geojson.get("features", [])
 
-        # Ask QGIS to load the file as a vector layer.
-        layer = QgsVectorLayer(
-            file_path,
-            "GisMark results",
-            "ogr",
-        )
+        # Group features by geometry type.
+        groups = {
+            "Polygon": [],
+            "Line": [],
+            "Point": [],
+        }
 
-        if not layer.isValid():
-            QMessageBox.warning(
-                self,
-                "GisMark",
-                "QGIS could not load the GeoJSON data.",
+        for feature in features:
+            geometry = feature.get("geometry")
+
+            if not geometry:
+                continue
+
+            geometry_type = geometry.get("type", "")
+
+            if geometry_type in ("Polygon", "MultiPolygon"):
+                groups["Polygon"].append(feature)
+
+            elif geometry_type in ("LineString", "MultiLineString"):
+                groups["Line"].append(feature)
+
+            elif geometry_type in ("Point", "MultiPoint"):
+                groups["Point"].append(feature)
+
+        project = QgsProject.instance()
+        layers = []
+
+        # Create layers in this order so points appear on top.
+        for name, layer_features in groups.items():
+            if not layer_features:
+                continue
+
+            collection = {
+                "type": "FeatureCollection",
+                "features": layer_features,
+            }
+
+            # Write the GeoJSON to a temporary file.
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".geojson",
+                encoding="utf-8",
+                delete=False,
+            ) as file:
+                json.dump(collection, file)
+                file_path = file.name
+
+            layer = QgsVectorLayer(
+                file_path,
+                f"GisMark - {name}s",
+                "ogr",
             )
-            return
 
-        # Add the layer to the current QGIS project.
-        QgsProject.instance().addMapLayer(layer)
+            if not layer.isValid():
+                QMessageBox.warning(
+                    self,
+                    "GisMark",
+                    f"Could not load the {name.lower()} layer.",
+                )
+                continue
 
-        # Select the layer and zoom to its features.
-        self.iface.setActiveLayer(layer)
-        self.iface.zoomToActiveLayer()
-        
+            project.addMapLayer(layer)
+            layers.append(layer)
 
+        # Zoom to all the new layers together.
+        if layers:
+            extent = layers[0].extent()
 
+            for layer in layers[1:]:
+                extent.combineExtentWith(layer.extent())
+
+            self.iface.mapCanvas().setExtent(extent)
+            self.iface.mapCanvas().refresh()
+
+            self.iface.setActiveLayer(layers[0])
+
+       
 class GisMarkPlugin:
     def __init__(self, iface):
         self.iface = iface
