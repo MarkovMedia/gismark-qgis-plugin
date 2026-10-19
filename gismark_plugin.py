@@ -5,7 +5,7 @@ import requests
 import uuid
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis, QgsMessageLog
-from qgis.PyQt.QtCore import Qt, QSettings
+from qgis.PyQt.QtCore import Qt, QSettings, QThread, pyqtSignal
 from qgis.PyQt.QtGui import QTextCursor
 
 from qgis.PyQt.QtWidgets import (
@@ -21,7 +21,37 @@ from qgis.PyQt.QtWidgets import (
 )
 
 API_URL = "http://localhost:1337/api/v1/chat"
-# API_KEY = "gm_live_5rhJ2-ul-WcbzgZp1iIx1j1x1Cvm7N2dd5pH_feOOtc"
+
+
+
+class ApiRequestWorker(QThread):
+    result_ready = pyqtSignal(dict)
+    error_occurred = pyqtSignal(str)
+
+    def __init__(self, api_url, body, headers):
+        super().__init__()
+
+        self.api_url = api_url
+        self.body = body
+        self.headers = headers
+
+    def run(self):
+        try:
+            response = requests.post(
+                self.api_url,
+                json=self.body,
+                headers=self.headers,
+                timeout=60,
+            )
+
+            response.raise_for_status()
+            data = response.json()
+
+            self.result_ready.emit(data)
+
+        except Exception as error:
+            self.error_occurred.emit(str(error))
+
 
 
 class GisMarkDialog(QDialog):
@@ -41,8 +71,14 @@ class GisMarkDialog(QDialog):
             "Explore OpenStreetMap in Natural Language"
         )
         layout.addWidget(description)
+
         
-        #layout.addWidget(QLabel("What are you looking for?"))
+        self.loading_indicator = QLabel("")
+        self.loading_indicator.setStyleSheet(
+            "color: #2879bd; font-style: italic;"
+        )
+
+        layout.addWidget(self.loading_indicator)
 
         self.prompt_input = QLineEdit()
         self.prompt_input.setMinimumHeight(38)
@@ -142,58 +178,77 @@ class GisMarkDialog(QDialog):
         self.search_button.setEnabled(False)
         self.search_button.setText("Searching...")
 
-        try:
-            response = requests.post(
-                API_URL,
-                data=json.dumps(body),
-                headers=headers,
-                timeout=60,
+        # Show the loading indicator.
+        self.loading_indicator.show()
+        self.search_button.setEnabled(False)
+        self.search_button.setText("Thinking...")
+
+        # Start the API request in the background.
+        self.api_worker = ApiRequestWorker(
+            API_URL,
+            body,
+            headers,
+        )
+
+        self.api_worker.result_ready.connect(
+            self.handle_api_response
+        )
+
+        self.api_worker.error_occurred.connect(
+        self.handle_api_error
+        )
+
+        self.api_worker.finished.connect(
+            self.api_worker.deleteLater
+        )
+
+        self.api_worker.start()
+
+
+    def handle_api_response(self, data):
+        self.loading_indicator.setText("")
+        self.search_button.setEnabled(True)
+        self.prompt_input.setEnabled(True)
+        self.search_button.setText("Send")
+
+        # Display the assistant's response.
+        message = data.get("message", {})
+        content = message.get("content", "")
+
+        self.add_chat_message("assistant", content)
+
+        # Display returned features on the map.
+        features = data.get("features", [])
+
+        if features:
+            geojson = {
+                "type": "FeatureCollection",
+                "features": features,
+            }
+
+            feature_set = data.get(
+                "featureSet",
+                "GisMark results",
             )
 
-            response.raise_for_status()
-                       
-            data = response.json()
+            self.display_geojson(geojson, feature_set)
 
-            message = data.get("message", "")
-            content = message.get("content", "")       
+        self.prompt_input.setFocus()
 
-            QgsMessageLog.logMessage(
-                content,
-                "GisMark",
-                Qgis.Info,
-                ) 
+    def handle_api_error(self, error_message):
+        self.loading_indicator.setText("")
+        self.search_button.setEnabled(True)
+        self.prompt_input.setEnabled(True)
+        self.search_button.setText("Send")
 
-            self.add_chat_message("assistant", content)
+        QMessageBox.warning(
+            self,
+            "GisMark",
+            f"The request failed:\n{error_message}",
+        )
 
-            features = data.get("features", [])
+        self.prompt_input.setFocus()
 
-            if features:
-                geojson = {
-                    "type": "FeatureCollection",
-                    "features": features,
-                }
-
-                feature_set = data.get("featureSet", "GisMark")
-                self.display_geojson(geojson, feature_set)
-           
-        except requests.RequestException as error:
-            message = str(error)
-
-            if getattr(error, "response", None) is not None:
-                message += (
-                    "\n\nServer response:\n"
-                    + error.response.text[:1500]
-                )
-
-            QMessageBox.warning(
-                self,
-                "GisMark API error",
-                message,
-            )
-
-        finally:
-            self.search_button.setEnabled(True)
-            self.search_button.setText("Send")
 
     def add_chat_message(self, role, content):
         # Store the message.
