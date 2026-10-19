@@ -2,6 +2,7 @@
 import os
 import tempfile
 import requests
+import uuid
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis, QgsMessageLog
 from qgis.PyQt.QtCore import Qt, QSettings
@@ -19,9 +20,8 @@ from qgis.PyQt.QtWidgets import (
     QLineEdit,
 )
 
-
 API_URL = "http://localhost:1337/api/v1/chat"
-API_KEY = "gm_live_mpFaPHGLjz3YYO9iheC0u42iNfUiK19Hyq_ZlCn95Jk"
+# API_KEY = "gm_live_5rhJ2-ul-WcbzgZp1iIx1j1x1Cvm7N2dd5pH_feOOtc"
 
 
 class GisMarkDialog(QDialog):
@@ -30,6 +30,7 @@ class GisMarkDialog(QDialog):
         self.iface = iface
 
         self.chat_history = []
+        self.session_id = str(uuid.uuid4())
 
         self.setWindowTitle("GisMark")
         self.resize(460, 380)
@@ -40,10 +41,11 @@ class GisMarkDialog(QDialog):
             "Explore OpenStreetMap in Natural Language"
         )
         layout.addWidget(description)
-
-        layout.addWidget(QLabel("What are you looking for?"))
+        
+        #layout.addWidget(QLabel("What are you looking for?"))
 
         self.prompt_input = QLineEdit()
+        self.prompt_input.setMinimumHeight(38)
         self.prompt_input.setPlaceholderText(
             "Ask GisMark something..."
         )
@@ -52,6 +54,9 @@ class GisMarkDialog(QDialog):
 
         self.search_button = QPushButton("Send")
         self.search_button.clicked.connect(self.search)
+        self.prompt_input.returnPressed.connect(
+            self.search_button.click
+        )
         layout.addWidget(self.search_button)
 
         layout.addWidget(QLabel("GisMark response"))
@@ -64,29 +69,48 @@ class GisMarkDialog(QDialog):
 
         layout.addWidget(self.chat_output)
 
+        self.new_chat_button = QPushButton("New Chat")
+        self.new_chat_button.setFixedWidth(
+        self.new_chat_button.sizeHint().width() + 20
+        )
+        self.new_chat_button.clicked.connect(self.new_chat)
+
+
         self.settings_button = QPushButton("Settings")
         self.settings_button.setFixedWidth(
-        self.settings_button.sizeHint().width() + 20
+            self.settings_button.sizeHint().width() + 20
         )
         self.settings_button.clicked.connect(self.open_settings)
 
-        layout.addWidget(self.settings_button)
-        layout.setAlignment(self.settings_button, Qt.AlignLeft)
+        button_layout = QHBoxLayout()
+        button_layout.addWidget(self.new_chat_button)
+        button_layout.addStretch()
+        button_layout.addWidget(self.settings_button)
+
+        layout.addLayout(button_layout)
+
 
     def open_settings(self):
         dialog = SettingsDialog(self)
         dialog.exec()
 
+    def new_chat(self):
+        # Generate a new session ID.
+        self.session_id = str(uuid.uuid4())
+
+        # Clear the conversation history and display.
+        self.chat_history.clear()
+        self.chat_output.clear()
+
+        QgsMessageLog.logMessage(
+            f"Started new chat: {self.session_id}",
+            "GisMark",
+            Qgis.Info,
+        )
+
+
     def search(self):
         prompt = self.prompt_input.text().strip()
-
-        if not prompt:
-            QMessageBox.warning(
-                self,
-                "GisMark",
-                "Please enter a search prompt."
-            )
-            return
 
         if not prompt:
             return
@@ -108,6 +132,7 @@ class GisMarkDialog(QDialog):
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
+            "x-session-id": self.session_id,
         }
 
         body = {
@@ -122,7 +147,7 @@ class GisMarkDialog(QDialog):
                 API_URL,
                 data=json.dumps(body),
                 headers=headers,
-                timeout=30,
+                timeout=60,
             )
 
             response.raise_for_status()
@@ -168,7 +193,7 @@ class GisMarkDialog(QDialog):
 
         finally:
             self.search_button.setEnabled(True)
-            self.search_button.setText("Search GisMark")
+            self.search_button.setText("Send")
 
     def add_chat_message(self, role, content):
         # Store the message.
