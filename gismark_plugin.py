@@ -3,6 +3,7 @@ import os
 import tempfile
 import requests
 import uuid
+import traceback
 
 from qgis.core import QgsProject, QgsVectorLayer, Qgis, QgsMessageLog
 from qgis.PyQt.QtCore import Qt, QSettings, QThread, pyqtSignal
@@ -55,6 +56,7 @@ class ApiRequestWorker(QThread):
 
 
 class GisMarkDialog(QDialog):
+
     def __init__(self, iface, parent=None):
         super().__init__(parent)
         self.iface = iface
@@ -67,34 +69,55 @@ class GisMarkDialog(QDialog):
 
         layout = QVBoxLayout(self)
 
+        # Header: description + New Chat button
+        header_layout = QHBoxLayout()
+
         description = QLabel(
             "Explore OpenStreetMap in Natural Language"
         )
-        layout.addWidget(description)
+        header_layout.addWidget(description)
+        header_layout.addStretch()
 
-        
+        self.new_chat_button = QPushButton("New Chat")
+        self.new_chat_button.setAutoDefault(False)
+        self.new_chat_button.setDefault(False)
+
+        self.new_chat_button.setFixedWidth(
+            self.new_chat_button.sizeHint().width() + 20
+        )
+        self.new_chat_button.clicked.connect(self.new_chat)
+        header_layout.addWidget(self.new_chat_button)
+
+        layout.addLayout(header_layout)
+
+        # Loading indicator
         self.loading_indicator = QLabel("")
         self.loading_indicator.setStyleSheet(
             "color: #2879bd; font-style: italic;"
         )
-
         layout.addWidget(self.loading_indicator)
 
+        # Prompt input
         self.prompt_input = QLineEdit()
         self.prompt_input.setMinimumHeight(38)
         self.prompt_input.setPlaceholderText(
             "Ask GisMark something..."
         )
-
         layout.addWidget(self.prompt_input)
 
+        # Send button
         self.search_button = QPushButton("Send")
+        self.search_button.setAutoDefault(False)
+        self.search_button.setDefault(False)
         self.search_button.clicked.connect(self.search)
-        self.prompt_input.returnPressed.connect(
-            self.search_button.click
-        )
+
+        # self.prompt_input.returnPressed.connect(
+        # self.search_button.click
+        # )
+        self.prompt_input.returnPressed.connect(self.search)
         layout.addWidget(self.search_button)
 
+        # Conversation output
         layout.addWidget(QLabel("GisMark response"))
 
         self.chat_output = QTextEdit()
@@ -102,35 +125,42 @@ class GisMarkDialog(QDialog):
         self.chat_output.setPlaceholderText(
             "Your conversation with GisMark will appear here."
         )
-
         layout.addWidget(self.chat_output)
 
-        self.new_chat_button = QPushButton("New Chat")
-        self.new_chat_button.setFixedWidth(
-        self.new_chat_button.sizeHint().width() + 20
-        )
-        self.new_chat_button.clicked.connect(self.new_chat)
-
+        # Footer: Settings + account link
+        footer_layout = QHBoxLayout()
 
         self.settings_button = QPushButton("Settings")
+        self.settings_button.setAutoDefault(False)
+        self.settings_button.setDefault(False)
         self.settings_button.setFixedWidth(
             self.settings_button.sizeHint().width() + 20
         )
         self.settings_button.clicked.connect(self.open_settings)
+        footer_layout.addWidget(self.settings_button)
 
-        button_layout = QHBoxLayout()
-        button_layout.addWidget(self.new_chat_button)
-        button_layout.addStretch()
-        button_layout.addWidget(self.settings_button)
+        footer_layout.addStretch()
 
-        layout.addLayout(button_layout)
+        self.account_label = QLabel(
+            'Create an account at <a href="https://gismark.io">'
+            'gismark.io</a> to get your API key.'
+        )
+        self.account_label.setOpenExternalLinks(True)
+        footer_layout.addWidget(self.account_label)
 
+        layout.addLayout(footer_layout)
 
     def open_settings(self):
         dialog = SettingsDialog(self)
         dialog.exec()
 
     def new_chat(self):
+
+        QgsMessageLog.logMessage(
+            "".join(traceback.format_stack()),
+            "GisMark",
+            Qgis.Info,
+        )
         # Generate a new session ID.
         self.session_id = str(uuid.uuid4())
 
@@ -144,8 +174,14 @@ class GisMarkDialog(QDialog):
             Qgis.Info,
         )
 
-
     def search(self):
+
+        QgsMessageLog.logMessage(
+            f"SEARCH called. Session: {self.session_id}",
+            "GisMark",
+            Qgis.Info,
+        )
+
         prompt = self.prompt_input.text().strip()
 
         if not prompt:
@@ -175,8 +211,8 @@ class GisMarkDialog(QDialog):
             "prompt": prompt,
         }
 
-        self.search_button.setEnabled(False)
-        self.search_button.setText("Searching...")
+        # self.search_button.setEnabled(False)
+        # self.search_button.setText("Searching...")
 
         # Show the loading indicator.
         self.loading_indicator.show()
@@ -195,7 +231,7 @@ class GisMarkDialog(QDialog):
         )
 
         self.api_worker.error_occurred.connect(
-        self.handle_api_error
+            self.handle_api_error
         )
 
         self.api_worker.finished.connect(
@@ -206,6 +242,13 @@ class GisMarkDialog(QDialog):
 
 
     def handle_api_response(self, data):
+
+        QgsMessageLog.logMessage(
+            f"API response received. Session: {self.session_id}",
+            "GisMark",
+            Qgis.Info,
+        )
+
         self.loading_indicator.setText("")
         self.search_button.setEnabled(True)
         self.prompt_input.setEnabled(True)
