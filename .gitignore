@@ -1,0 +1,13 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDE and version control
+.vscode/
+.idea/
+.git/
+
+# OS-generated files
+.DS_Store
+Thumbs.db

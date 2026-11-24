@@ -1,10 +1,15 @@
 [general]
 name=GisMark
-description=A simple GisMark plugin prototype.
+description=Search OpenStreetMap data using natural language and add the results directly to QGIS as map layers.
+about=GisMark lets you explore OpenStreetMap data without writing Overpass queries or learning the underlying tagging system. Describe the places or geographic features you're looking for, and GisMark will find the relevant data and add it to your QGIS project as layers.
+Get 5 free requests per day without an API key. For more requests, create a GisMark account at gismark.io and enter your API key in the plugin settings.
 version=0.8
 qgisMinimumVersion=3.28
 author=Markov Media
 email=hello@gismark.io
-about=The first experimental GisMark plugin for QGIS.
+homepage=https://gismark.io
+tracker=https://github.com/MarkovMedia/gismark-qgis-plugin/issues
+repository=https://github.com/MarkovMedia/gismark-qgis-plugin
 category=Plugins
-experimental=True
+experimental=False
+deprecated=False

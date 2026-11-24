@@ -1,3 +1,3 @@
 ﻿def classFactory(iface):
-    from .gismark_plugin import GisMarkPlugin
+    from .gismark import GisMarkPlugin
     return GisMarkPlugin(iface)

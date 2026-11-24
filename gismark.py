@@ -21,9 +21,8 @@ from qgis.PyQt.QtWidgets import (
     QLineEdit,
 )
 
-API_URL = "http://localhost:1337/api/v1/chat"
-
-
+API_URL = "https://admin.gismark.io/api/v1/chat"
+#API_URL = "http://localhost:1337/api/v1/chat"
 
 class ApiRequestWorker(QThread):
     result_ready = pyqtSignal(dict)
@@ -118,36 +117,36 @@ class GisMarkDialog(QDialog):
         layout.addWidget(self.search_button)
 
         # Conversation output
-        layout.addWidget(QLabel("GisMark response"))
+        layout.addWidget(QLabel("Response"))
 
         self.chat_output = QTextEdit()
         self.chat_output.setReadOnly(True)
         self.chat_output.setPlaceholderText(
-            "Your conversation with GisMark will appear here."
+            "Your conversation will appear here."
         )
         layout.addWidget(self.chat_output)
 
         # Footer: Settings + account link
         footer_layout = QHBoxLayout()
 
-        self.settings_button = QPushButton("Settings")
+        self.account_label = QLabel(
+            'Get an account and API key at <a href="https://gismark.io">'
+            'gismark.io</a> to make more requests.'
+            )
+        self.account_label.setOpenExternalLinks(True)
+        footer_layout.addWidget(self.account_label)
+
+        footer_layout.addStretch()
+
+        self.settings_button = QPushButton("API Key")
         self.settings_button.setAutoDefault(False)
         self.settings_button.setDefault(False)
         self.settings_button.setFixedWidth(
             self.settings_button.sizeHint().width() + 20
         )
         self.settings_button.clicked.connect(self.open_settings)
+
         footer_layout.addWidget(self.settings_button)
-
-        footer_layout.addStretch()
-
-        self.account_label = QLabel(
-            'Create an account at <a href="https://gismark.io">'
-            'gismark.io</a> to get your API key.'
-        )
-        self.account_label.setOpenExternalLinks(True)
-        footer_layout.addWidget(self.account_label)
-
         layout.addLayout(footer_layout)
 
     def open_settings(self):
@@ -192,14 +191,14 @@ class GisMarkDialog(QDialog):
 
         api_key = QSettings().value("GisMark/apiKey", "", type=str)
 
-        if not api_key:
-            QMessageBox.information(
-                self,
-                "GisMark",
-                "Please add your API key in Settings first.",
-            )
-            self.open_settings()
-            return
+        # if not api_key:
+        #     QMessageBox.information(
+        #         self,
+        #         "GisMark",
+        #         "Please add your API key in Settings first.",
+        #     )
+        #     self.open_settings()
+        #     return
 
         headers = {
             "Authorization": f"Bearer {api_key}",
@@ -406,7 +405,6 @@ class GisMarkDialog(QDialog):
             canvas.refresh()
 
             self.iface.setActiveLayer(layers[-1])
-
        
 class GisMarkPlugin:
     def __init__(self, iface):
@@ -416,7 +414,7 @@ class GisMarkPlugin:
 
     def initGui(self):
         self.action = QAction(
-            "Search GisMark...",
+            "Open Chat",
             self.iface.mainWindow(),
         )
         self.action.triggered.connect(self.run)
@@ -426,11 +424,18 @@ class GisMarkPlugin:
         self.iface.removePluginMenu("&GisMark", self.action)
 
     def run(self):
-        self.dialog = GisMarkDialog(self.iface, self.iface.mainWindow())
+        # Create the dialog only if it doesn't exist yet.
+        if self.dialog is None:
+            self.dialog = GisMarkDialog(
+                self.iface,
+                self.iface.mainWindow()
+            )
+
+        # Show and bring the existing dialog to the foreground.
         self.dialog.show()
+        self.dialog.showNormal()
         self.dialog.raise_()
         self.dialog.activateWindow()
-
 
 class SettingsDialog(QDialog):
     def __init__(self, parent=None):
@@ -440,11 +445,11 @@ class SettingsDialog(QDialog):
         self.setMinimumWidth(320)
 
         # API key label and password field.
-        self.api_key_label = QLabel("GisMark API key:")
+        self.api_key_label = QLabel("API key:")
 
         self.api_key_input = QLineEdit()
         self.api_key_input.setEchoMode(QLineEdit.Password)
-        self.api_key_input.setPlaceholderText("Enter your API key")
+        self.api_key_input.setPlaceholderText("Enter your API key from your GisMark user account")
         self.api_key_input.setText(
            QSettings().value("GisMark/apiKey", "", type=str)
         )
@@ -472,13 +477,13 @@ class SettingsDialog(QDialog):
     def save_settings(self):
         api_key = self.api_key_input.text().strip()
 
-        if not api_key:
-            QMessageBox.warning(
-                self,
-                "GisMark Settings",
-                "Please enter your API key.",
-            )
-            return
+        # if not api_key:
+        #     QMessageBox.warning(
+        #         self,
+        #         "GisMark Settings",
+        #         "Please enter your API key.",
+        #     )
+        #     return
 
         QSettings().setValue("GisMark/apiKey", api_key)
         self.accept()
